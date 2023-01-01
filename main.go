@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/gen2brain/go-fitz"
 )
@@ -62,17 +63,18 @@ func main() {
 	}
 
 	// process chunks
-	log.Printf("processing %d pages, in chunks of: %d\n", totalPages, *chunkSizeF)
+	startTime := time.Now()
+	log.Printf("processing %d page(s), in chunks of: %d\n", endPage-startPage, *chunkSizeF)
 	remPages := endPage - startPage
-	curStart, curEnd := startPage, intMin(startPage+*chunkSizeF, totalPages)
+	curStart, curEnd := startPage, intMin(startPage+remPages, startPage+*chunkSizeF, totalPages)
 	count := 0
 	for remPages > 0 {
 		count = processChunk(curStart, curEnd, *inFileF, *outDirF, count)
 		remPages -= curEnd - curStart
 		curStart, curEnd = curEnd, intMin(curEnd+*chunkSizeF, totalPages)
 	}
-
-	fmt.Println("done!")
+	fmt.Printf("conversion took: %v\n", time.Since(startTime))
+	fmt.Println("done! \xf0\x9f\x99\x8c")
 }
 
 func processChunk(start int, end int, f string, opath string, cnt int) int {
@@ -158,9 +160,21 @@ func checkError(e error) {
 	}
 }
 
-func intMin(a, b int) int {
-	if a < b {
-		return a
+func intMin(vals ...int) int {
+	if len(vals) == 0 { //should not happen, break don't handle
+		panic("no arguments passed to 'min'")
 	}
-	return b
+
+	if len(vals) == 1 {
+		return vals[0]
+	}
+
+	best := vals[0]
+	for _, val := range vals[1:] {
+		if val < best {
+			best = val
+		}
+	}
+
+	return best
 }
