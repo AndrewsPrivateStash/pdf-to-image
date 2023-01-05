@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"image/jpeg"
 	"log"
+	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strings"
 	"time"
 
 	"github.com/gen2brain/go-fitz"
@@ -69,23 +69,24 @@ func main() {
 	curStart, curEnd := startPage, intMin(startPage+remPages, startPage+*chunkSizeF, totalPages)
 	count := 0
 	for remPages > 0 {
-		count = processChunk(curStart, curEnd, *inFileF, *outDirF, count)
+		count = processChunk(curStart, curEnd, *inFileF, *outDirF, count, endPage-startPage)
 		remPages -= curEnd - curStart
 		curStart, curEnd = curEnd, intMin(curEnd+*chunkSizeF, totalPages)
 	}
-	fmt.Printf("conversion took: %v\n", time.Since(startTime))
+	fmt.Printf("\nconversion took: %v\n", time.Since(startTime))
 	fmt.Println("done! \xf0\x9f\x99\x8c")
 }
 
-func processChunk(start int, end int, f string, opath string, cnt int) int {
+func processChunk(start int, end int, f string, opath string, cnt int, tot int) int {
 	doc, err := fitz.New(f)
 	checkError(err)
 	defer doc.Close()
 
+	const pollFreq = 5
+
 	// Extract pages as images
 	count := cnt
 	for n := start; n < end; n++ {
-		logProgress(n, count)
 
 		img, err := doc.Image(n)
 		checkError(err)
@@ -96,10 +97,14 @@ func processChunk(start int, end int, f string, opath string, cnt int) int {
 		err = jpeg.Encode(f, img, &jpeg.Options{Quality: 100})
 		checkError(err)
 
+		if count%pollFreq == 0 {
+			logProgress(tot, count)
+		}
+
 		f.Close()
 		count++
 	}
-
+	logProgress(tot, count)
 	return count
 }
 
@@ -122,36 +127,19 @@ func removeAllFiles(dir string) error {
 	return nil
 }
 
-func clearTerminal() {
-	switch o := runtime.GOOS; o {
-	case "linux":
-		cmd := exec.Command("clear")
-		cmd.Stdout = os.Stdout
-		if err := cmd.Run(); err != nil {
-			log.Fatal(err)
-		}
-	case "darwin":
-		cmd := exec.Command("clear")
-		cmd.Stdout = os.Stdout
-		if err := cmd.Run(); err != nil {
-			return
-		}
-	case "windows":
-		cmd := exec.Command("cmd", "/c", "cls")
-		cmd.Stdout = os.Stdout
-		if err := cmd.Run(); err != nil {
-			return
-		}
-	default:
-		return
-	}
-}
+func logProgress(tot int, cur int) {
 
-func logProgress(n int, c int) {
-	if c > 5 {
-		clearTerminal()
-	}
-	log.Printf("working on pg: %d\n", n+1)
+	const SYMBOL_WIDTH = 20
+	const SYMBOL = "#"
+
+	progress := float64(cur) / float64(tot)
+	outStr := fmt.Sprintf("\rthrough pg: %d\t[", cur)
+
+	symCnt := int(math.Ceil(SYMBOL_WIDTH * progress))
+	outStr += strings.Repeat(SYMBOL, symCnt)
+	outStr += strings.Repeat(" ", SYMBOL_WIDTH-symCnt) + "]"
+	outStr += string(" ") + fmt.Sprintf("%.1f%%", progress*100)
+	fmt.Printf("%s", outStr)
 }
 
 func checkError(e error) {
